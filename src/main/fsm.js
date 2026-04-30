@@ -373,7 +373,10 @@ function saveAsPNG() {
 	drawUsing(canvas.getContext('2d'));
 	selectedObject = oldSelectedObject;
 	var pngData = canvas.toDataURL('image/png');
-	document.location.href = pngData;
+	var a = document.createElement('a');
+	a.href = pngData;
+	a.download = 'fsm.png';
+	a.click();
 }
 
 function saveAsSVG() {
