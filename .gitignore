@@ -1,2 +1,4 @@
-/www/fsm.js
-.vercel
+node_modules/
+dist/
+.vercel/
+www/
