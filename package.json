@@ -1,0 +1,25 @@
+{
+  "name": "fsm",
+  "version": "1.0.0",
+  "description": "http://madebyevan.com/fsm/",
+  "main": "build.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Notluf22/fsm.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Notluf22/fsm/issues"
+  },
+  "homepage": "https://github.com/Notluf22/fsm#readme",
+  "devDependencies": {
+    "vite": "^8.0.10"
+  }
+}
