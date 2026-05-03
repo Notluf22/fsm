@@ -587,11 +587,12 @@ function drawArrow(c, x, y, angle) {
 }
 
 function canvasHasFocus() {
-	return (document.activeElement || document.body) == document.body;
+	var activeElement = document.activeElement || document.body;
+	return activeElement == document.body || activeElement == canvas;
 }
 
 function drawText(c, originalText, x, y, angleOrNull, isSelected) {
-	text = convertLatexShortcuts(originalText);
+	var text = convertLatexShortcuts(originalText);
 	c.font = '20px "Times New Roman", serif';
 	var width = c.measureText(text).width;
 
@@ -631,7 +632,10 @@ var caretVisible = true;
 
 function resetCaret() {
 	clearInterval(caretTimer);
-	caretTimer = setInterval('caretVisible = !caretVisible; draw()', 500);
+	caretTimer = setInterval(function() {
+		caretVisible = !caretVisible;
+		draw();
+	}, 500);
 	caretVisible = true;
 }
 
@@ -647,6 +651,8 @@ var selectedObject = null; // either a Link or a Node
 var currentLink = null; // a Link
 var movingObject = false;
 var originalClick;
+var deltaMouseX = 0;
+var deltaMouseY = 0;
 
 function drawUsing(c) {
 	c.clearRect(0, 0, canvas.width, canvas.height);
@@ -673,11 +679,16 @@ function drawUsing(c) {
 }
 
 var needsRedraw = true;
+var renderLoopStarted = false;
 function draw() {
     needsRedraw = true;
 }
 
 function renderLoop() {
+	if(!canvas) {
+		requestAnimationFrame(renderLoop);
+		return;
+	}
     if (needsRedraw) {
         drawUsing(canvas.getContext('2d'));
         saveBackup();
@@ -685,7 +696,12 @@ function renderLoop() {
     }
     requestAnimationFrame(renderLoop);
 }
-requestAnimationFrame(renderLoop);
+
+function startRenderLoop() {
+	if(renderLoopStarted) return;
+	renderLoopStarted = true;
+	requestAnimationFrame(renderLoop);
+}
 
 function selectObject(x, y) {
 	for(var i = 0; i < nodes.length; i++) {
@@ -719,8 +735,10 @@ window.onload = function() {
 	canvas = document.getElementById('canvas');
 	restoreBackup();
 	draw();
+	startRenderLoop();
 
 	canvas.onmousedown = function(e) {
+		canvas.focus();
 		var mouse = crossBrowserRelativeMousePos(e);
 		selectedObject = selectObject(mouse.x, mouse.y);
 		movingObject = false;
@@ -754,6 +772,7 @@ window.onload = function() {
 	};
 
 	canvas.ondblclick = function(e) {
+		canvas.focus();
 		var mouse = crossBrowserRelativeMousePos(e);
 		selectedObject = selectObject(mouse.x, mouse.y);
 
@@ -833,6 +852,7 @@ window.onload = function() {
 
 	canvas.addEventListener('touchstart', function(e) {
 		e.preventDefault();
+		canvas.focus();
 		var touch = e.changedTouches[0];
 		var mouse = getTouchPos(touch);
 
@@ -930,26 +950,33 @@ window.onload = function() {
 			window._touchArrowMode = false;
 			var btn = document.getElementById('btnArrowMode');
 			if (btn) {
-				btn.textContent = '🔗 Arrow Mode';
+				btn.textContent = 'Arrow Mode';
 				btn.style.background = '';
 				btn.style.color = '';
 			}
 		}
 	}, { passive: false });
 
-	// Responsive canvas sizing
+	// Keep the 800x600 drawing space while scaling the visible canvas.
 	function resizeCanvas() {
 		var container = canvas.parentElement;
-		var maxW = Math.min(800, container.clientWidth - 40);
-		if (maxW < 280) maxW = 280;
-		canvas.style.width = maxW + 'px';
-		canvas.style.height = (maxW * 0.75) + 'px';
+		var containerStyle = window.getComputedStyle(container);
+		var paddingX = parseFloat(containerStyle.paddingLeft) + parseFloat(containerStyle.paddingRight);
+		var availW = Math.max(0, container.clientWidth - paddingX);
+		var cssWidth = Math.min(800, availW || window.innerWidth - 20);
+		canvas.style.width = cssWidth + 'px';
+		canvas.style.height = (cssWidth * 0.75) + 'px';
 	}
-	resizeCanvas();
+	requestAnimationFrame(function() { resizeCanvas(); });
 	window.addEventListener('resize', resizeCanvas);
 }
 
 var shift = false;
+// Expose shift so the touch Arrow Mode button (in HTML) can toggle it
+Object.defineProperty(window, '_fsmShift', {
+	get: function() { return shift; },
+	set: function(v) { shift = v; }
+});
 
 document.onkeydown = function(e) {
 	var key = crossBrowserKey(e);
@@ -969,20 +996,7 @@ document.onkeydown = function(e) {
 		// backspace is a shortcut for the back button, but do NOT want to change pages
 		return false;
 	} else if(key == 46) { // delete key
-		if(selectedObject != null) {
-			for(var i = 0; i < nodes.length; i++) {
-				if(nodes[i] == selectedObject) {
-					nodes.splice(i--, 1);
-				}
-			}
-			for(var i = 0; i < links.length; i++) {
-				if(links[i] == selectedObject || links[i].node == selectedObject || links[i].nodeA == selectedObject || links[i].nodeB == selectedObject) {
-					links.splice(i--, 1);
-				}
-			}
-			selectedObject = null;
-			draw();
-		}
+		deleteSelectedObject();
 	}
 };
 
@@ -1097,6 +1111,8 @@ function restoreBackup() {
 
 	try {
 		var backup = JSON.parse(localStorage['fsm']);
+		nodes = [];
+		links = [];
 
 		for(var i = 0; i < backup.nodes.length; i++) {
 			var backupNode = backup.nodes[i];
@@ -1133,11 +1149,7 @@ function restoreBackup() {
 	}
 }
 
-function saveBackup() {
-	if(!localStorage || !JSON) {
-		return;
-	}
-
+function serializeFSM() {
 	var backup = {
 		'nodes': [],
 		'links': [],
@@ -1186,7 +1198,15 @@ function saveBackup() {
 		}
 	}
 
-	localStorage['fsm'] = JSON.stringify(backup);
+	return JSON.stringify(backup);
+}
+
+function saveBackup() {
+	if(!localStorage || !JSON) {
+		return;
+	}
+
+	localStorage['fsm'] = serializeFSM();
 }
 
 /*
@@ -1230,20 +1250,25 @@ let isRestoringHistory = false;
 
 function pushHistory() {
     if (isRestoringHistory) return;
-    const stateStr = localStorage['fsm'];
+    const stateStr = serializeFSM();
     if (historyIndex >= 0 && historyStack[historyIndex] === stateStr) return;
     historyStack = historyStack.slice(0, historyIndex + 1);
     historyStack.push(stateStr);
     historyIndex++;
+    localStorage['fsm'] = stateStr;
 }
 
 function undo() {
+    pushHistory();
     if (historyIndex > 0) {
         historyIndex--;
         isRestoringHistory = true;
         localStorage['fsm'] = historyStack[historyIndex];
         restoreBackup();
         isRestoringHistory = false;
+        selectedObject = null;
+        currentLink = null;
+        movingObject = false;
         draw();
     }
 }
@@ -1255,8 +1280,30 @@ function redo() {
         localStorage['fsm'] = historyStack[historyIndex];
         restoreBackup();
         isRestoringHistory = false;
+        selectedObject = null;
+        currentLink = null;
+        movingObject = false;
         draw();
     }
+}
+
+function deleteSelectedObject() {
+    if(selectedObject == null) return;
+
+    for(var i = 0; i < nodes.length; i++) {
+        if(nodes[i] == selectedObject) {
+            nodes.splice(i--, 1);
+        }
+    }
+    for(var j = 0; j < links.length; j++) {
+        if(links[j] == selectedObject || links[j].node == selectedObject || links[j].nodeA == selectedObject || links[j].nodeB == selectedObject) {
+            links.splice(j--, 1);
+        }
+    }
+    selectedObject = null;
+    currentLink = null;
+    movingObject = false;
+    draw();
 }
 
 // Intercept saveBackup to also push to history
@@ -1374,15 +1421,17 @@ function simulateFSM() {
         let activeLink = null;
         
         for (let link of links) {
-            if ((link.nodeA === currentNode || link.node === currentNode) && link.text.split(',').map(s=>s.trim()).includes(char)) {
-                nextNode = link.nodeB || link.node;
+            let isOutgoingLink = link instanceof Link && link.nodeA === currentNode;
+            let isSelfLink = link instanceof SelfLink && link.node === currentNode;
+            if ((isOutgoingLink || isSelfLink) && link.text.split(',').map(s=>s.trim()).includes(char)) {
+                nextNode = isSelfLink ? currentNode : link.nodeB;
                 activeLink = link;
                 break;
             }
         }
         
         if (!nextNode) {
-            alert(`Rejected: No transition for '${char}' from state '${currentNode.text}'`);
+            alert(`Rejected: No outgoing arrow labeled '${char}' from state '${currentNode.text || '(unnamed)'}'.`);
             selectedObject = null;
             draw();
             return;
@@ -1408,6 +1457,7 @@ window.saveAsSVG = saveAsSVG;
 window.saveAsLaTeX = saveAsLaTeX;
 window.undo = undo;
 window.redo = redo;
+window.deleteSelectedObject = deleteSelectedObject;
 window.validateFSM = validateFSM;
 window.simulateFSM = simulateFSM;
 window.saveJSON = saveJSON;
@@ -1415,6 +1465,7 @@ window.saveJSON = saveJSON;
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btnUndo').onclick = undo;
     document.getElementById('btnRedo').onclick = redo;
+    document.getElementById('btnDelete').onclick = deleteSelectedObject;
     document.getElementById('btnValidate').onclick = validateFSM;
     document.getElementById('btnSimulate').onclick = simulateFSM;
     document.getElementById('btnSaveJSON').onclick = saveJSON;

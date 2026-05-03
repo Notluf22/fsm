@@ -31,6 +31,7 @@
             flex-direction: column;
             align-items: center;
             padding: 40px 20px;
+            overflow-x: hidden;
         }
 
         .header {
@@ -46,7 +47,6 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 10px;
-            letter-spacing: -1px;
         }
 
         .subtitle {
@@ -70,6 +70,7 @@
             border: 1px solid var(--glass-border);
             border-radius: 24px;
             padding: 20px;
+            width: min(100%, 842px);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
@@ -85,7 +86,9 @@
             border-radius: 16px;
             cursor: crosshair;
             touch-action: none;
-            max-width: 100%;
+            width: min(100%, 800px);
+            height: auto;
+            aspect-ratio: 4 / 3;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
             transition: transform 0.3s ease;
         }
@@ -185,7 +188,7 @@
         }
 
         .instructions li::before {
-            content: '→';
+            content: '->';
             position: absolute;
             left: 0;
             color: var(--primary);
@@ -257,7 +260,7 @@
             .btn { padding: 8px 10px; font-size: 0.8rem; }
         }
     </style>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
     <script>
     // Base64 helper if needed
     if (typeof btoa == 'undefined') {
@@ -306,14 +309,14 @@
             arrowModeBtn.addEventListener('click', function() {
                 if (window._touchArrowMode) {
                     window._touchArrowMode = false;
-                    window.shift = false;
-                    this.textContent = '🔗 Arrow Mode';
+                    window._fsmShift = false;
+                    this.textContent = 'Arrow Mode';
                     this.style.background = '';
                     this.style.color = '';
                 } else {
                     window._touchArrowMode = true;
-                    window.shift = true;
-                    this.textContent = '✅ Arrow ON';
+                    window._fsmShift = true;
+                    this.textContent = 'Arrow ON';
                     this.style.background = '#6366f1';
                     this.style.color = 'white';
                 }
@@ -331,7 +334,7 @@
     <div class="container">
         <div class="canvas-container">
             <div id="validation-msg" style="margin-bottom:10px; font-weight:600; font-size:14px;"></div>
-            <canvas id="canvas" width="800" height="600">
+            <canvas id="canvas" width="800" height="600" tabindex="0">
                 <span class="error">Your browser does not support the HTML5 &lt;canvas&gt; element</span>
             </canvas>
         </div>
@@ -342,9 +345,10 @@
                 <div class="export-actions">
                     <button id="btnUndo" class="btn">Undo</button>
                     <button id="btnRedo" class="btn">Redo</button>
+                    <button id="btnDelete" class="btn" style="background:#ef4444; color:white; border:none;">Delete</button>
                     <button id="btnValidate" class="btn" style="background:#10b981; color:white; border:none;">Validate NFA/DFA</button>
                     <button id="btnSimulate" class="btn" style="background:#8b5cf6; color:white; border:none;">Simulate</button>
-                    <button id="btnArrowMode" class="btn" style="display:none;">🔗 Arrow Mode</button>
+                    <button id="btnArrowMode" class="btn" style="display:none;">Arrow Mode</button>
                 </div>
             </div>
 
@@ -366,7 +370,7 @@
                 <ul>
                     <li><b>Add state:</b> Double-click / double-tap</li>
                     <li><b>Arrow (desktop):</b> Shift-drag from state</li>
-                    <li><b>Arrow (mobile):</b> Tap “Arrow Mode” then drag</li>
+                    <li><b>Arrow (mobile):</b> Tap "Arrow Mode" then drag</li>
                     <li><b>Move:</b> Drag it</li>
                     <li><b>Delete:</b> Click & press Delete</li>
                 </ul>

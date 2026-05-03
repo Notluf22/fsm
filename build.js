@@ -1,33 +1,23 @@
 const fs = require('fs');
 const path = require('path');
 
-function getFiles(dir, filesList = []) {
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-        const fullPath = path.join(dir, file);
-        if (fs.statSync(fullPath).isDirectory()) {
-            getFiles(fullPath, filesList);
-        } else if (fullPath.endsWith('.js')) {
-            filesList.push(fullPath);
+function copyDir(src, dest) {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            copyDir(srcPath, destPath);
+        } else {
+            fs.copyFileSync(srcPath, destPath);
         }
     }
-    return filesList;
 }
 
-const srcDir = path.join(__dirname, 'src');
-const files = getFiles(srcDir);
-let data = '';
+const outDir = path.join(__dirname, 'dist');
+fs.rmSync(outDir, { recursive: true, force: true });
+fs.mkdirSync(outDir, { recursive: true });
+fs.copyFileSync(path.join(__dirname, 'index.html'), path.join(outDir, 'index.html'));
+copyDir(path.join(__dirname, 'src'), path.join(outDir, 'src'));
 
-for (const file of files) {
-    data += fs.readFileSync(file, 'utf8') + '\n';
-}
-
-const outDir = path.join(__dirname, 'www');
-if (!fs.existsSync(outDir)) {
-    fs.mkdirSync(outDir, { recursive: true });
-}
-
-const outPath = path.join(outDir, 'fsm.js');
-fs.writeFileSync(outPath, data, 'utf8');
-
-console.log(`built ${outPath} (${data.length} bytes)`);
+console.log(`built ${outDir}`);
