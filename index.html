@@ -84,6 +84,8 @@
             background: #ffffff;
             border-radius: 16px;
             cursor: crosshair;
+            touch-action: none;
+            max-width: 100%;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
             transition: transform 0.3s ease;
         }
@@ -242,6 +244,18 @@
             text-align: center;
         }
 
+
+        /* Mobile responsive */
+        @media (max-width: 650px) {
+            body { padding: 16px 10px; }
+            h1 { font-size: 2rem; }
+            .subtitle { font-size: 0.9rem; }
+            .container { gap: 14px; }
+            .canvas-container { padding: 10px; border-radius: 14px; }
+            .sidebar { max-width: 100%; }
+            .card { padding: 14px; }
+            .btn { padding: 8px 10px; font-size: 0.8rem; }
+        }
     </style>
     <script type="module" src="/src/main.js"></script>
     <script>
@@ -278,6 +292,33 @@
                 outputEl.classList.remove('active');
             }
         }, 500);
+
+
+        // Show Arrow Mode button on touch-capable devices
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            var arrowBtn = document.getElementById('btnArrowMode');
+            if (arrowBtn) arrowBtn.style.display = '';
+        }
+
+        // Arrow Mode toggle — mobile substitute for Shift key
+        var arrowModeBtn = document.getElementById('btnArrowMode');
+        if (arrowModeBtn) {
+            arrowModeBtn.addEventListener('click', function() {
+                if (window._touchArrowMode) {
+                    window._touchArrowMode = false;
+                    window.shift = false;
+                    this.textContent = '🔗 Arrow Mode';
+                    this.style.background = '';
+                    this.style.color = '';
+                } else {
+                    window._touchArrowMode = true;
+                    window.shift = true;
+                    this.textContent = '✅ Arrow ON';
+                    this.style.background = '#6366f1';
+                    this.style.color = 'white';
+                }
+            });
+        }
     });
     </script>
 </head>
@@ -303,6 +344,7 @@
                     <button id="btnRedo" class="btn">Redo</button>
                     <button id="btnValidate" class="btn" style="background:#10b981; color:white; border:none;">Validate NFA/DFA</button>
                     <button id="btnSimulate" class="btn" style="background:#8b5cf6; color:white; border:none;">Simulate</button>
+                    <button id="btnArrowMode" class="btn" style="display:none;">🔗 Arrow Mode</button>
                 </div>
             </div>
 
@@ -322,10 +364,11 @@
             <div class="card instructions">
                 <h3>Controls</h3>
                 <ul>
-                    <li><b>Add a state:</b> Double-click on canvas</li>
-                    <li><b>Add an arrow:</b> Shift-drag from state</li>
-                    <li><b>Move something:</b> Drag it around</li>
-                    <li><b>Delete something:</b> Click & press Delete</li>
+                    <li><b>Add state:</b> Double-click / double-tap</li>
+                    <li><b>Arrow (desktop):</b> Shift-drag from state</li>
+                    <li><b>Arrow (mobile):</b> Tap “Arrow Mode” then drag</li>
+                    <li><b>Move:</b> Drag it</li>
+                    <li><b>Delete:</b> Click & press Delete</li>
                 </ul>
             </div>
         </div>

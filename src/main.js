@@ -817,6 +817,136 @@ window.onload = function() {
 			draw();
 		}
 	};
+
+	// ---- Touch Support ----
+	var lastTapTime = 0;
+
+	function getTouchPos(touch) {
+		var rect = canvas.getBoundingClientRect();
+		var scaleX = canvas.width / rect.width;
+		var scaleY = canvas.height / rect.height;
+		return {
+			'x': (touch.clientX - rect.left) * scaleX,
+			'y': (touch.clientY - rect.top) * scaleY
+		};
+	}
+
+	canvas.addEventListener('touchstart', function(e) {
+		e.preventDefault();
+		var touch = e.changedTouches[0];
+		var mouse = getTouchPos(touch);
+
+		// Double-tap to add state / toggle accept
+		var now = Date.now();
+		var doubleTap = (now - lastTapTime) < 300 && e.touches.length === 1;
+		lastTapTime = now;
+
+		if (doubleTap) {
+			selectedObject = selectObject(mouse.x, mouse.y);
+			if (selectedObject == null) {
+				selectedObject = new Node(mouse.x, mouse.y);
+				nodes.push(selectedObject);
+				resetCaret();
+				draw();
+			} else if (selectedObject instanceof Node) {
+				selectedObject.isAcceptState = !selectedObject.isAcceptState;
+				draw();
+			}
+			return;
+		}
+
+		selectedObject = selectObject(mouse.x, mouse.y);
+		movingObject = false;
+		originalClick = mouse;
+
+		if (selectedObject != null) {
+			if (shift && selectedObject instanceof Node) {
+				currentLink = new SelfLink(selectedObject, mouse);
+			} else {
+				movingObject = true;
+				deltaMouseX = deltaMouseY = 0;
+				if (selectedObject.setMouseStart) {
+					selectedObject.setMouseStart(mouse.x, mouse.y);
+				}
+			}
+			resetCaret();
+		} else if (shift) {
+			currentLink = new TemporaryLink(mouse, mouse);
+		}
+		draw();
+	}, { passive: false });
+
+	canvas.addEventListener('touchmove', function(e) {
+		e.preventDefault();
+		var touch = e.changedTouches[0];
+		var mouse = getTouchPos(touch);
+
+		if (currentLink != null) {
+			var targetNode = selectObject(mouse.x, mouse.y);
+			if (!(targetNode instanceof Node)) targetNode = null;
+
+			if (selectedObject == null) {
+				if (targetNode != null) {
+					currentLink = new StartLink(targetNode, originalClick);
+				} else {
+					currentLink = new TemporaryLink(originalClick, mouse);
+				}
+			} else {
+				if (targetNode == selectedObject) {
+					currentLink = new SelfLink(selectedObject, mouse);
+				} else if (targetNode != null) {
+					currentLink = new Link(selectedObject, targetNode);
+				} else {
+					currentLink = new TemporaryLink(selectedObject.closestPointOnCircle(mouse.x, mouse.y), mouse);
+				}
+			}
+			draw();
+		}
+
+		if (movingObject) {
+			selectedObject.setAnchorPoint(mouse.x, mouse.y);
+			if (selectedObject instanceof Node) snapNode(selectedObject);
+			draw();
+		}
+	}, { passive: false });
+
+	canvas.addEventListener('touchend', function(e) {
+		e.preventDefault();
+		movingObject = false;
+
+		if (currentLink != null) {
+			if (!(currentLink instanceof TemporaryLink)) {
+				selectedObject = currentLink;
+				links.push(currentLink);
+				resetCaret();
+			}
+			currentLink = null;
+			draw();
+		}
+
+		// Auto-reset arrow mode after gesture
+		if (window._touchArrowMode) {
+			shift = false;
+			window._touchArrowMode = false;
+			var btn = document.getElementById('btnArrowMode');
+			if (btn) {
+				btn.textContent = '🔗 Arrow Mode';
+				btn.style.background = '';
+				btn.style.color = '';
+			}
+		}
+	}, { passive: false });
+
+	// Responsive canvas sizing
+	function resizeCanvas() {
+		var container = canvas.parentElement;
+		var maxW = Math.min(800, container.clientWidth - 40);
+		if (maxW < 280) maxW = 280;
+		canvas.style.width = maxW + 'px';
+		canvas.style.height = (maxW * 0.75) + 'px';
+	}
+	resizeCanvas();
+	window.addEventListener('resize', resizeCanvas);
 }
 
 var shift = false;
@@ -888,32 +1018,15 @@ function crossBrowserKey(e) {
 	return e.which || e.keyCode;
 }
 
-function crossBrowserElementPos(e) {
-	e = e || window.event;
-	var obj = e.target || e.srcElement;
-	var x = 0, y = 0;
-	while(obj.offsetParent) {
-		x += obj.offsetLeft;
-		y += obj.offsetTop;
-		obj = obj.offsetParent;
-	}
-	return { 'x': x, 'y': y };
-}
-
-function crossBrowserMousePos(e) {
-	e = e || window.event;
-	return {
-		'x': e.pageX || e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft,
-		'y': e.pageY || e.clientY + document.body.scrollTop + document.documentElement.scrollTop,
-	};
-}
-
 function crossBrowserRelativeMousePos(e) {
-	var element = crossBrowserElementPos(e);
-	var mouse = crossBrowserMousePos(e);
+	var rect = canvas.getBoundingClientRect();
+	var scaleX = canvas.width / rect.width;
+	var scaleY = canvas.height / rect.height;
+	var clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+	var clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
 	return {
-		'x': mouse.x - element.x,
-		'y': mouse.y - element.y
+		'x': (clientX - rect.left) * scaleX,
+		'y': (clientY - rect.top) * scaleY
 	};
 }
 
