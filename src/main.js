@@ -588,7 +588,64 @@ function drawArrow(c, x, y, angle) {
 
 function canvasHasFocus() {
 	var activeElement = document.activeElement || document.body;
-	return activeElement == document.body || activeElement == canvas;
+	return activeElement == document.body || activeElement == canvas || activeElement == mobileTextInput;
+}
+
+function isTouchDevice() {
+	return ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+}
+
+function ensureMobileTextInput() {
+	if(mobileTextInput) return;
+
+	mobileTextInput = document.createElement('input');
+	mobileTextInput.type = 'text';
+	mobileTextInput.autocapitalize = 'none';
+	mobileTextInput.autocomplete = 'off';
+	mobileTextInput.autocorrect = 'off';
+	mobileTextInput.spellcheck = false;
+	mobileTextInput.setAttribute('aria-label', 'Selected FSM label');
+	mobileTextInput.style.position = 'fixed';
+	mobileTextInput.style.left = '0';
+	mobileTextInput.style.bottom = '0';
+	mobileTextInput.style.width = '1px';
+	mobileTextInput.style.height = '1px';
+	mobileTextInput.style.opacity = '0.01';
+	mobileTextInput.style.border = '0';
+	mobileTextInput.style.padding = '0';
+	mobileTextInput.style.fontSize = '16px';
+	mobileTextInput.style.background = 'transparent';
+	mobileTextInput.style.color = 'transparent';
+	mobileTextInput.style.caretColor = 'transparent';
+	mobileTextInput.style.zIndex = '-1';
+
+	mobileTextInput.addEventListener('input', function() {
+		if(selectedObject != null && 'text' in selectedObject) {
+			selectedObject.text = mobileTextInput.value;
+			resetCaret();
+			draw();
+		}
+	});
+
+	document.body.appendChild(mobileTextInput);
+}
+
+function syncMobileTextInput(shouldFocus) {
+	if(!isTouchDevice()) return;
+	ensureMobileTextInput();
+
+	if(selectedObject != null && 'text' in selectedObject) {
+		mobileTextInput.value = selectedObject.text || '';
+		mobileTextInput.disabled = false;
+		if(shouldFocus) {
+			mobileTextInput.focus({ preventScroll: true });
+			mobileTextInput.setSelectionRange(mobileTextInput.value.length, mobileTextInput.value.length);
+		}
+	} else {
+		mobileTextInput.value = '';
+		mobileTextInput.disabled = true;
+		mobileTextInput.blur();
+	}
 }
 
 function drawText(c, originalText, x, y, angleOrNull, isSelected) {
@@ -653,6 +710,7 @@ var movingObject = false;
 var originalClick;
 var deltaMouseX = 0;
 var deltaMouseY = 0;
+var mobileTextInput = null;
 
 function drawUsing(c) {
 	c.clearRect(0, 0, canvas.width, canvas.height);
@@ -733,6 +791,9 @@ function snapNode(node) {
 
 window.onload = function() {
 	canvas = document.getElementById('canvas');
+	if(isTouchDevice()) {
+		ensureMobileTextInput();
+	}
 	restoreBackup();
 	draw();
 	startRenderLoop();
@@ -758,6 +819,7 @@ window.onload = function() {
 		} else if(shift) {
 			currentLink = new TemporaryLink(mouse, mouse);
 		}
+		syncMobileTextInput(false);
 
 		draw();
 
@@ -780,9 +842,11 @@ window.onload = function() {
 			selectedObject = new Node(mouse.x, mouse.y);
 			nodes.push(selectedObject);
 			resetCaret();
+			syncMobileTextInput(false);
 			draw();
 		} else if(selectedObject instanceof Node) {
 			selectedObject.isAcceptState = !selectedObject.isAcceptState;
+			syncMobileTextInput(false);
 			draw();
 		}
 	};
@@ -831,6 +895,7 @@ window.onload = function() {
 				selectedObject = currentLink;
 				links.push(currentLink);
 				resetCaret();
+				syncMobileTextInput(false);
 			}
 			currentLink = null;
 			draw();
@@ -839,6 +904,9 @@ window.onload = function() {
 
 	// ---- Touch Support ----
 	var lastTapTime = 0;
+	var touchStartObject = null;
+	var touchStartedArrow = false;
+	var touchDidMove = false;
 
 	function getTouchPos(touch) {
 		var rect = canvas.getBoundingClientRect();
@@ -852,7 +920,6 @@ window.onload = function() {
 
 	canvas.addEventListener('touchstart', function(e) {
 		e.preventDefault();
-		canvas.focus();
 		var touch = e.changedTouches[0];
 		var mouse = getTouchPos(touch);
 
@@ -867,9 +934,11 @@ window.onload = function() {
 				selectedObject = new Node(mouse.x, mouse.y);
 				nodes.push(selectedObject);
 				resetCaret();
+				syncMobileTextInput(true);
 				draw();
 			} else if (selectedObject instanceof Node) {
 				selectedObject.isAcceptState = !selectedObject.isAcceptState;
+				syncMobileTextInput(true);
 				draw();
 			}
 			return;
@@ -878,6 +947,9 @@ window.onload = function() {
 		selectedObject = selectObject(mouse.x, mouse.y);
 		movingObject = false;
 		originalClick = mouse;
+		touchStartObject = selectedObject;
+		touchStartedArrow = !!(shift && selectedObject instanceof Node);
+		touchDidMove = false;
 
 		if (selectedObject != null) {
 			if (shift && selectedObject instanceof Node) {
@@ -893,6 +965,7 @@ window.onload = function() {
 		} else if (shift) {
 			currentLink = new TemporaryLink(mouse, mouse);
 		}
+		syncMobileTextInput(false);
 		draw();
 	}, { passive: false });
 
@@ -900,6 +973,13 @@ window.onload = function() {
 		e.preventDefault();
 		var touch = e.changedTouches[0];
 		var mouse = getTouchPos(touch);
+		if(originalClick) {
+			var moveDx = mouse.x - originalClick.x;
+			var moveDy = mouse.y - originalClick.y;
+			if(moveDx * moveDx + moveDy * moveDy > 36) {
+				touchDidMove = true;
+			}
+		}
 
 		if (currentLink != null) {
 			var targetNode = selectObject(mouse.x, mouse.y);
@@ -933,16 +1013,30 @@ window.onload = function() {
 	canvas.addEventListener('touchend', function(e) {
 		e.preventDefault();
 		movingObject = false;
+		var touch = e.changedTouches[0];
+		var mouse = touch ? getTouchPos(touch) : originalClick;
 
 		if (currentLink != null) {
+			if(touchStartedArrow && touchStartObject instanceof Node) {
+				var targetNode = mouse ? selectObject(mouse.x, mouse.y) : null;
+				if(targetNode == touchStartObject || targetNode == null || !touchDidMove) {
+					currentLink = new SelfLink(touchStartObject, mouse || originalClick);
+				}
+			}
 			if (!(currentLink instanceof TemporaryLink)) {
 				selectedObject = currentLink;
 				links.push(currentLink);
 				resetCaret();
+				syncMobileTextInput(true);
 			}
 			currentLink = null;
 			draw();
+		} else if(!touchDidMove) {
+			syncMobileTextInput(true);
 		}
+		touchStartObject = null;
+		touchStartedArrow = false;
+		touchDidMove = false;
 
 		// Auto-reset arrow mode after gesture
 		if (window._touchArrowMode) {
@@ -983,12 +1077,15 @@ document.onkeydown = function(e) {
 
 	if(key == 16) {
 		shift = true;
+	} else if(document.activeElement == mobileTextInput) {
+		return true;
 	} else if(!canvasHasFocus()) {
 		// don't read keystrokes when other things have focus
 		return true;
 	} else if(key == 8) { // backspace key
 		if(selectedObject != null && 'text' in selectedObject) {
 			selectedObject.text = selectedObject.text.substr(0, selectedObject.text.length - 1);
+			syncMobileTextInput(false);
 			resetCaret();
 			draw();
 		}
@@ -1011,11 +1108,15 @@ document.onkeyup = function(e) {
 document.onkeypress = function(e) {
 	// don't read keystrokes when other things have focus
 	var key = crossBrowserKey(e);
+	if(document.activeElement == mobileTextInput) {
+		return true;
+	}
 	if(!canvasHasFocus()) {
 		// don't read keystrokes when other things have focus
 		return true;
 	} else if(key >= 0x20 && key <= 0x7E && !e.metaKey && !e.altKey && !e.ctrlKey && selectedObject != null && 'text' in selectedObject) {
 		selectedObject.text += String.fromCharCode(key);
+		syncMobileTextInput(false);
 		resetCaret();
 		draw();
 
@@ -1269,6 +1370,7 @@ function undo() {
         selectedObject = null;
         currentLink = null;
         movingObject = false;
+        syncMobileTextInput(false);
         draw();
     }
 }
@@ -1283,6 +1385,7 @@ function redo() {
         selectedObject = null;
         currentLink = null;
         movingObject = false;
+        syncMobileTextInput(false);
         draw();
     }
 }
@@ -1303,6 +1406,7 @@ function deleteSelectedObject() {
     selectedObject = null;
     currentLink = null;
     movingObject = false;
+    syncMobileTextInput(false);
     draw();
 }
 
